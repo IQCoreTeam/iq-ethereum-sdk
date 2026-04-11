@@ -11,7 +11,7 @@ export async function readSendCodeChain(
 ): Promise<string> {
   const provider = getProvider();
   const contract = getContract(provider);
-  const chunks: string[] = [];
+  const batches: string[][] = [];
   const visited = new Set<string>();
   let cursor = tailTxHash;
   let count = 0;
@@ -26,13 +26,14 @@ export async function readSendCodeChain(
     const parsed = contract.interface.parseTransaction({ data: tx.data });
     if (!parsed || parsed.name !== "sendCode") throw new Error(`Unexpected function: ${parsed?.name}`);
 
-    chunks.push(...parsed.args[0]); // codes[]
+    batches.push([...parsed.args[0]]); // codes[] per tx (preserve internal order)
     cursor = parsed.args[1]; // beforeTx
     count++;
     onProgress?.((count / (count + 1)) * 100);
   }
 
-  return chunks.reverse().join("");
+  // reverse tx order, but keep chunk order within each tx
+  return batches.reverse().flat().join("");
 }
 
 export async function walkEventChain(

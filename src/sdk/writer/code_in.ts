@@ -12,6 +12,8 @@ export function toChunks(data: string | string[]): string[] {
   return chunks.length ? chunks : [""];
 }
 
+const MAX_CHUNKS_PER_TX = 400;
+
 export async function uploadLinkedList(
   signer: Signer,
   chunks: string[],
@@ -19,11 +21,12 @@ export async function uploadLinkedList(
 ): Promise<string> {
   const contract = getContract(signer);
   let beforeTx = "Genesis";
-  for (let i = 0; i < chunks.length; i++) {
-    const tx = await contract.sendCode([chunks[i]], beforeTx, 0, 0);
+  for (let i = 0; i < chunks.length; i += MAX_CHUNKS_PER_TX) {
+    const batch = chunks.slice(i, i + MAX_CHUNKS_PER_TX);
+    const tx = await contract.sendCode(batch, beforeTx, 0, 0);
     const receipt = await tx.wait();
     beforeTx = receipt!.hash;
-    onProgress?.(((i + 1) / chunks.length) * 100);
+    onProgress?.(Math.min(i + batch.length, chunks.length) / chunks.length * 100);
   }
   return beforeTx;
 }
