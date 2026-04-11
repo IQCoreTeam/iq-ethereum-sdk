@@ -1,24 +1,30 @@
-// =============================================================================
-//  readCodeIn — 단일 트랜잭션에서 코드인 데이터 읽기
-// =============================================================================
+import { getContract } from "../../contract";
+import { getProvider } from "../utils/provider";
+import { readSendCodeChain } from "./txchain";
 
-// readCodeIn(txHash: string, onProgress?): Promise<{ metadata: string; data: string | null }>
-//   input:  txHash — userInventoryCodeIn 트랜잭션의 hash
-//           onProgress — 진행률 콜백 (linked list 읽기 시 사용)
-//   output: { metadata, data }
-//
-//   작업:
-//     1. provider = getProvider()
-//     2. contract = getContract(provider)
-//     3. tx = await provider.getTransaction(txHash)
-//     4. parsed = contract.interface.parseTransaction({ data: tx.data })
-//        → parsed.name === "userInventoryCodeIn"
-//        → parsed.args: { handle: string, tailTx: string, typeField: string, offset: string }
-//     5. tailTx = parsed.args.tailTx
-//     6. if tailTx === "" || tailTx === "0x" (inline):
-//        - metadata에서 data 필드 추출 (JSON.parse 후 data 분리)
-//        - return { metadata: cleaned, data: extracted }
-//     7. else (linked list):
-//        - data = await readSendCodeChain(tailTx, onProgress)
-//        - metadata = JSON.stringify({ handle, typeField, offset })
-//        - return { metadata, data }
+export async function readCodeIn(
+  txHash: string,
+  onProgress?: (pct: number) => void,
+): Promise<{ metadata: Record<string, string>; data: string }> {
+  const provider = getProvider();
+  const contract = getContract(provider);
+
+  const tx = await provider.getTransaction(txHash);
+  if (!tx) throw new Error(`Transaction not found: ${txHash}`);
+
+  const parsed = contract.interface.parseTransaction({ data: tx.data });
+  if (!parsed || parsed.name !== "userInventoryCodeIn")
+    throw new Error(`Unexpected function: ${parsed?.name}`);
+
+  const [handle, tailTx, typeField, offset] = parsed.args;
+  const meta = { handle, typeField, offset };
+
+  // inline: tailTx empty means data is embedded in the metadata fields
+  if (!tailTx || tailTx === "") {
+    return { metadata: meta, data: handle };
+  }
+
+  // linked list: follow the chain
+  const data = await readSendCodeChain(tailTx, onProgress);
+  return { metadata: meta, data };
+}

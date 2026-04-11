@@ -1,3 +1,2 @@
-// Re-exports
-// export { CODEIN_ABI } from "./abi";
-// export { DEFAULT_CONTRACT_ADDRESS, getContract } from "./addresses";
+export { CODEIN_ABI } from "./abi";
+export { DEFAULT_CONTRACT_ADDRESS, getContract } from "./addresses";

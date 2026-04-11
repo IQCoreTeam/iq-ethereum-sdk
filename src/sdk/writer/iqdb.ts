@@ -1,96 +1,154 @@
-// =============================================================================
-//  IQDB + Connection Writer — DB/테이블/커넥션 쓰기 작업
-// =============================================================================
-//
-//  모든 함수는 첫 번째 인자로 signer: Signer를 받음
+import { type Signer, parseEther, toUtf8Bytes, ZeroAddress, id as keccak } from "ethers";
+import { getContract } from "../../contract";
+import { LINKED_LIST_FEE } from "../constants";
+import { prepareUpload } from "./code_in";
+import { deriveDmSeed } from "../utils/hash";
 
-// ----- initializeDbRoot -----
-//
-// initializeDbRoot(signer: Signer, dbRootId: string): Promise<string>
-//   input:  dbRootId — DB 루트 식별자
-//   output: tx hash
-//   작업: contract.initializeDbRoot(toSeedBytes(dbRootId))
+function toSeed(s: string) { return keccak(s); }
+function toBytes(s: string) { return toUtf8Bytes(s); }
+const fee = { value: parseEther(LINKED_LIST_FEE) };
 
-// ----- manageTableCreators -----
-//
-// manageTableCreators(signer: Signer, dbRootId: string, tableCreators: string[], extCreators: string[]): Promise<string>
-//   output: tx hash
-//   작업: contract.manageTableCreators(rootIdBytes, tableCreators, extCreators)
+export async function initializeDbRoot(signer: Signer, dbRootId: string) {
+  const c = getContract(signer);
+  const tx = await c.initializeDbRoot(toSeed(dbRootId));
+  return (await tx.wait())!.hash;
+}
 
-// ----- createTable -----
-//
-// createTable(signer: Signer, dbRootId: string, tableSeed: string, tableName: string, columns: string[], idCol: string, extKeys: string[], gate?, writers?: string[], private?: boolean): Promise<string>
-//   input:  private — true이면 createPrivateTable 호출 (규칙2: 동일 시그니처 함수 통합)
-//   output: tx hash
-//
-//   작업:
-//     1. string → bytes 변환
-//     2. gate 기본값: { tokenAddress: ZeroAddress, amount: 0, gateType: 0 }
-//     3. private ? contract.createPrivateTable(...) : contract.createTable(...)
-//     4. { value: LINKED_LIST_FEE }
+export async function manageTableCreators(
+  signer: Signer, dbRootId: string, tableCreators: string[], extCreators: string[],
+) {
+  const c = getContract(signer);
+  const tx = await c.manageTableCreators(toSeed(dbRootId), tableCreators, extCreators);
+  return (await tx.wait())!.hash;
+}
 
-// ----- updateTable -----
-//
-// updateTable(signer: Signer, dbRootId: string, tableSeed: string, tableName: string, columns: string[], idCol: string, extKeys: string[], gate?, writers?: string[]): Promise<string>
-//   output: tx hash
-//   작업: contract.updateTable(...)
-//   NOTE: fee 없음 (payable 아님)
+export async function createTable(
+  signer: Signer,
+  dbRootId: string,
+  tableSeed: string,
+  tableName: string,
+  columns: string[],
+  idCol: string,
+  extKeys: string[] = [],
+  gate = { tokenAddress: ZeroAddress, amount: 0, gateType: 0 },
+  writers: string[] = [],
+  isPrivate = false,
+) {
+  const c = getContract(signer);
+  const args = [
+    toSeed(dbRootId), toSeed(tableSeed), toBytes(tableName),
+    columns.map(toBytes), toBytes(idCol), extKeys.map(toBytes), gate, writers,
+  ] as const;
+  const tx = isPrivate
+    ? await c.createPrivateTable(...args, fee)
+    : await c.createTable(...args, fee);
+  return (await tx.wait())!.hash;
+}
 
-// ----- writeRow -----
-//
-// writeRow(signer: Signer, dbRootId: string, tableSeed: string, rowJson: string, onProgress?): Promise<string>
-//   output: tx hash
-//
-//   작업:
-//     1. { onChainPath, metadata } = await prepareUpload(signer, rowJson, onProgress)
-//        ← code_in.ts의 prepareUpload 재사용 (규칙2)
-//     2. contract.dbCodeIn(rootIdBytes, seedBytes, onChainPath, metadata, { value: LINKED_LIST_FEE })
+export async function updateTable(
+  signer: Signer,
+  dbRootId: string,
+  tableSeed: string,
+  tableName: string,
+  columns: string[],
+  idCol: string,
+  extKeys: string[] = [],
+  gate = { tokenAddress: ZeroAddress, amount: 0, gateType: 0 },
+  writers: string[] = [],
+) {
+  const c = getContract(signer);
+  const tx = await c.updateTable(
+    toSeed(dbRootId), toSeed(tableSeed), toBytes(tableName),
+    columns.map(toBytes), toBytes(idCol), extKeys.map(toBytes), gate, writers,
+  );
+  return (await tx.wait())!.hash;
+}
 
-// ----- manageRowData -----
-//
-// manageRowData(signer: Signer, dbRootId: string, tableSeed: string, rowJson: string, targetTx: string): Promise<string>
-//   input:  targetTx — 수정 대상 row의 tx hash (필수 — 규칙4: tableName은 컨트랙트가 이미 알므로 제거)
-//   output: tx hash
-//
-//   작업:
-//     1. { onChainPath, metadata } = await prepareUpload(signer, rowJson)
-//     2. table = await fetchTableMeta(dbRootId, tableSeed)  ← tableName 자동 획득
-//     3. contract.dbInstructionCodeIn(rootIdBytes, seedBytes, table.name, targetTx, onChainPath, metadata, { value: LINKED_LIST_FEE })
+export async function writeRow(
+  signer: Signer,
+  dbRootId: string,
+  tableSeed: string,
+  rowJson: string,
+  onProgress?: (pct: number) => void,
+) {
+  const { onChainPath, metadata } = await prepareUpload(signer, rowJson, onProgress);
+  const c = getContract(signer);
+  const tx = await c.dbCodeIn(toSeed(dbRootId), toSeed(tableSeed), onChainPath, metadata, fee);
+  const txHash = (await tx.wait())!.hash;
+  // update table pointer so walkEventChain can traverse by dbCodeIn tx hash
+  const ptrTx = await c.updateTableChainTx(toSeed(dbRootId), toSeed(tableSeed), txHash);
+  await ptrTx.wait();
+  return txHash;
+}
 
-// ----- requestConnection -----
-//
-// requestConnection(signer: Signer, dbRootId: string, receiver: string, tableName: string, columns: string[], idCol: string, extKeys: string[]): Promise<string>
-//   output: tx hash
-//
-//   작업:
-//     1. connectionSeed = deriveDmSeed(await signer.getAddress(), receiver)
-//     2. string → bytes 변환
-//     3. contract.requestConnection(rootIdBytes, connectionSeed, receiver, ..., { value: LINKED_LIST_FEE })
+export async function manageRowData(
+  signer: Signer,
+  dbRootId: string,
+  tableSeed: string,
+  rowJson: string,
+  targetTx: string,
+) {
+  const { onChainPath, metadata } = await prepareUpload(signer, rowJson);
+  const c = getContract(signer);
+  const table = await c.getTable(toSeed(dbRootId), toSeed(tableSeed));
+  const tx = await c.dbInstructionCodeIn(
+    toSeed(dbRootId), toSeed(tableSeed), table.name, targetTx, onChainPath, metadata, fee,
+  );
+  const txHash = (await tx.wait())!.hash;
+  const ptrTx = await c.updateTableChainTx(toSeed(dbRootId), toSeed(tableSeed), txHash);
+  await ptrTx.wait();
+  return txHash;
+}
 
-// ----- manageConnection -----
-//
-// manageConnection(signer: Signer, otherParty: string, dbRootId: string, newStatus: number): Promise<string>
-//   input:  otherParty, dbRootId, newStatus (규칙4: connectionSeed 제거 — 내부에서 deriveDmSeed로 계산)
-//   output: tx hash
-//
-//   작업:
-//     1. connectionSeed = deriveDmSeed(await signer.getAddress(), otherParty)
-//     2. contract.manageConnection(otherParty, rootIdBytes, connectionSeed, newStatus)
+export async function requestConnection(
+  signer: Signer,
+  dbRootId: string,
+  receiver: string,
+  tableName: string,
+  columns: string[],
+  idCol: string,
+  extKeys: string[] = [],
+) {
+  const sender = await signer.getAddress();
+  const connectionSeed = deriveDmSeed(sender, receiver);
+  const c = getContract(signer);
+  const tx = await c.requestConnection(
+    toSeed(dbRootId), connectionSeed, receiver,
+    toBytes(tableName), columns.map(toBytes), toBytes(idCol), extKeys.map(toBytes), fee,
+  );
+  return (await tx.wait())!.hash;
+}
 
-// ----- writeConnectionRow -----
-//
-// writeConnectionRow(signer: Signer, otherParty: string, dbRootId: string, rowJson: string, onProgress?): Promise<string>
-//   input:  (규칙4: connectionSeed 제거 — 내부에서 deriveDmSeed로 계산)
-//   output: tx hash
-//
-//   작업:
-//     1. connectionSeed = deriveDmSeed(await signer.getAddress(), otherParty)
-//     2. { onChainPath, metadata } = await prepareUpload(signer, rowJson, onProgress)
-//        ← code_in.ts의 prepareUpload 재사용 (규칙2)
-//     3. contract.walletConnectionCodeIn(otherParty, rootIdBytes, connectionSeed, onChainPath, metadata)
+export async function manageConnection(
+  signer: Signer, otherParty: string, dbRootId: string, newStatus: number,
+) {
+  const sender = await signer.getAddress();
+  const connectionSeed = deriveDmSeed(sender, otherParty);
+  const c = getContract(signer);
+  const tx = await c.manageConnection(otherParty, toSeed(dbRootId), connectionSeed, newStatus);
+  return (await tx.wait())!.hash;
+}
 
-// ----- updateUserMetadata -----
-//
-// updateUserMetadata(signer: Signer, metadata: string | Uint8Array): Promise<string>
-//   output: tx hash
-//   작업: contract.updateUserMetadata(typeof metadata === "string" ? toUtf8Bytes(metadata) : metadata)
+export async function writeConnectionRow(
+  signer: Signer,
+  otherParty: string,
+  dbRootId: string,
+  rowJson: string,
+  onProgress?: (pct: number) => void,
+) {
+  const sender = await signer.getAddress();
+  const connectionSeed = deriveDmSeed(sender, otherParty);
+  const { onChainPath, metadata } = await prepareUpload(signer, rowJson, onProgress);
+  const c = getContract(signer);
+  const tx = await c.walletConnectionCodeIn(otherParty, toSeed(dbRootId), connectionSeed, onChainPath, metadata);
+  const txHash = (await tx.wait())!.hash;
+  const ptrTx = await c.updateConnectionChainTx(otherParty, toSeed(dbRootId), connectionSeed, txHash);
+  await ptrTx.wait();
+  return txHash;
+}
+
+export async function updateUserMetadata(signer: Signer, metadata: string | Uint8Array) {
+  const c = getContract(signer);
+  const tx = await c.updateUserMetadata(typeof metadata === "string" ? toUtf8Bytes(metadata) : metadata);
+  return (await tx.wait())!.hash;
+}
