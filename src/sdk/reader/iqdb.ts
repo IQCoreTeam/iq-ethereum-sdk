@@ -1,4 +1,4 @@
-import { id as keccak, EventLog } from "ethers";
+import { id as keccak } from "ethers";
 import { getContract } from "../../contract";
 import { getProvider } from "../utils/provider";
 import { deriveDmSeed } from "../utils/hash";
@@ -71,21 +71,12 @@ export async function readConnection(dbRootId: string, partyA: string, partyB: s
 
 export async function fetchUserConnections(userAddress: string) {
   const c = getContract(getProvider());
-  const asRequester = await c.queryFilter(c.filters.ConnectionRequested(null, userAddress, null));
-  const asReceiver = await c.queryFilter(c.filters.ConnectionRequested(null, null, userAddress));
-
-  const seen = new Set<string>();
+  const connKeys: string[] = await c.getUserConnectionKeys(userAddress);
   const results: Array<{ connectionKey: string; partyA: string; partyB: string; status: string }> = [];
 
-  for (const event of [...asRequester, ...asReceiver]) {
-    if (!(event instanceof EventLog)) continue;
-    const connKey = event.args[0] as string;
-    if (seen.has(connKey)) continue;
-    seen.add(connKey);
-
+  for (const connKey of connKeys) {
     const info = await c.getConnection(connKey);
     if (!info.exists) continue;
-
     results.push({
       connectionKey: connKey,
       partyA: info.partyA,
