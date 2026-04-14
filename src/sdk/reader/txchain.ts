@@ -1,10 +1,34 @@
+// =============================================================================
+//  TxChain Reader — 연결리스트 순회 (SDK 핵심)
+// =============================================================================
+//
+//  이더리움 컨트랙트의 구조:
+//
+//    userTxChainTail (mapping) ── 최신 userInventoryCodeIn tx hash
+//           │
+//           ▼
+//    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+//    │ userInvCodeIn │ ── │ userInvCodeIn │ ── │ userInvCodeIn │
+//    │ (tail)        │    │ (beforeUserTx)│    │ (Genesis)     │
+//    │  tailTx───┐   │    │  tailTx───┐   │    │               │
+//    └───────────┼───┘    └───────────┼───┘    └──────────────┘
+//                ▼                    ▼
+//           sendCode chain       sendCode chain
+//           (calldata only)      (calldata only)
+//
+//  - "포인터 체인": userInventoryCodeIn tx들이 calldata의 beforeUserTx로 서로 연결
+//  - "데이터 체인": 각 노드의 tailTx에서 시작하는 sendCode 순차 호출
+//
+//  Table, Connection도 동일 패턴 (txChainTail 필드 + dbCodeIn/walletConnectionCodeIn의 beforeDataTx).
+
 import { getContract } from "../../contract";
 import { getProvider } from "../utils/provider";
 
-function isEnd(cursor: string) {
+export function isEnd(cursor: string) {
   return !cursor || cursor === "" || cursor === "Genesis";
 }
 
+// Reconstruct data from a sendCode linked list by walking calldata backwards.
 export async function readSendCodeChain(
   tailTxHash: string,
   onProgress?: (pct: number) => void,
@@ -26,45 +50,41 @@ export async function readSendCodeChain(
     const parsed = contract.interface.parseTransaction({ data: tx.data });
     if (!parsed || parsed.name !== "sendCode") throw new Error(`Unexpected function: ${parsed?.name}`);
 
-    batches.push([...parsed.args[0]]); // codes[] per tx (preserve internal order)
+    batches.push([...parsed.args[0]]); // codes[]
     cursor = parsed.args[1]; // beforeTx
     count++;
     onProgress?.((count / (count + 1)) * 100);
   }
 
-  // reverse tx order, but keep chunk order within each tx
   return batches.reverse().flat().join("");
 }
 
-export async function walkEventChain(
+// Walk a TxChain (Inscription/IQDB/Connection) backwards via calldata.
+// beforeFieldName: "beforeUserTx" (Inscription) or "beforeDataTx" (IQDB/Connection)
+// Returns each node's tx hash + parsed function args (caller maps fields to its own shape).
+export async function walkCalldataChain(
   headTxHash: string,
-  eventName: string,
+  beforeFieldName: string,
   options?: { limit?: number },
-): Promise<Array<{ txHash: string; args: Record<string, unknown> }>> {
+): Promise<Array<{ txHash: string; args: any }>> {
   const provider = getProvider();
   const contract = getContract(provider);
-  const results: Array<{ txHash: string; args: Record<string, unknown> }> = [];
+  const results: Array<{ txHash: string; args: any }> = [];
   const visited = new Set<string>();
   let cursor = headTxHash;
 
   while (!isEnd(cursor)) {
-    if (visited.has(cursor)) throw new Error("Loop detected in event chain");
+    if (visited.has(cursor)) throw new Error("Loop detected in tx chain");
     visited.add(cursor);
 
-    const receipt = await provider.getTransactionReceipt(cursor);
-    if (!receipt) throw new Error(`Receipt not found: ${cursor}`);
+    const tx = await provider.getTransaction(cursor);
+    if (!tx) throw new Error(`Transaction not found: ${cursor}`);
 
-    let parsedEvent: any = null;
-    for (const log of receipt.logs) {
-      try {
-        const p = contract.interface.parseLog({ topics: log.topics as string[], data: log.data });
-        if (p && p.name === eventName) { parsedEvent = p; break; }
-      } catch { /* skip non-matching logs */ }
-    }
-    if (!parsedEvent) throw new Error(`Event ${eventName} not found in tx ${cursor}`);
+    const parsed = contract.interface.parseTransaction({ data: tx.data });
+    if (!parsed) throw new Error(`Failed to parse tx: ${cursor}`);
 
-    results.push({ txHash: cursor, args: Object.fromEntries(Object.entries(parsedEvent.args)) });
-    cursor = parsedEvent.args.beforeTx ?? "";
+    results.push({ txHash: cursor, args: parsed.args });
+    cursor = parsed.args[beforeFieldName] ?? "";
     if (options?.limit && results.length >= options.limit) break;
   }
 

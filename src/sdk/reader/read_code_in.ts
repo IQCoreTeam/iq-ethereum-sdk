@@ -1,7 +1,9 @@
 import { getContract } from "../../contract";
 import { getProvider } from "../utils/provider";
-import { readSendCodeChain } from "./txchain";
+import { readSendCodeChain, isEnd } from "./txchain";
 
+// Read a single userInventoryCodeIn tx and reconstruct its data.
+// userInventoryCodeIn args: (handle, tailTx, typeField, offset, beforeUserTx)
 export async function readCodeIn(
   txHash: string,
   onProgress?: (pct: number) => void,
@@ -16,15 +18,14 @@ export async function readCodeIn(
   if (!parsed || parsed.name !== "userInventoryCodeIn")
     throw new Error(`Unexpected function: ${parsed?.name}`);
 
-  const [handle, tailTx, typeField, offset] = parsed.args;
-  const meta = { handle, typeField, offset };
+  const [handle, tailTx, typeField, offset, beforeUserTx] = parsed.args;
+  const meta = { handle, typeField, offset, beforeUserTx };
 
-  // inline: tailTx empty means data is embedded in the metadata fields
-  if (!tailTx || tailTx === "") {
+  // inline: tailTx empty → data is embedded in handle
+  if (isEnd(tailTx)) {
     return { metadata: meta, data: handle };
   }
 
-  // linked list: follow the chain
   const data = await readSendCodeChain(tailTx, onProgress);
   return { metadata: meta, data };
 }

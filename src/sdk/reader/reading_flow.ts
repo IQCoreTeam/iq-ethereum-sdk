@@ -1,14 +1,14 @@
 import { toUtf8String } from "ethers";
 import { getContract } from "../../contract";
 import { getProvider } from "../utils/provider";
-import { walkEventChain } from "./txchain";
+import { walkCalldataChain, isEnd } from "./txchain";
 
 export async function readUserState(userAddress: string) {
   const c = getContract(getProvider());
   const rawMeta = await c.userMetadata(userAddress);
   const metadata = rawMeta && rawMeta !== "0x" ? toUtf8String(rawMeta) : null;
-  const txChain = await c.userTxChains(userAddress);
-  return { metadata, txChain: { nowTx: txChain.nowTx, beforeTx: txChain.beforeTx } };
+  const txChainTail = await c.userTxChainTail(userAddress);
+  return { metadata, txChainTail };
 }
 
 export async function fetchInventoryTransactions(
@@ -16,13 +16,16 @@ export async function fetchInventoryTransactions(
   options?: { limit?: number },
 ) {
   const c = getContract(getProvider());
-  const txChain = await c.userTxChains(userAddress);
-  if (!txChain.nowTx || txChain.nowTx === "") return [];
+  const tail = await c.userTxChainTail(userAddress);
+  if (isEnd(tail)) return [];
 
-  const entries = await walkEventChain(txChain.nowTx, "UserInventoryCodeInEvent", options);
+  // userInventoryCodeIn args: (handle, tailTx, typeField, offset, beforeUserTx)
+  const entries = await walkCalldataChain(tail, "beforeUserTx", options);
   return entries.map((e) => ({
     txHash: e.txHash,
     handle: e.args.handle as string,
     tailTx: e.args.tailTx as string,
+    typeField: e.args.typeField as string,
+    offset: e.args.offset as string,
   }));
 }

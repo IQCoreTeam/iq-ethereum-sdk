@@ -1,3 +1,15 @@
+// =============================================================================
+//  Code-In Writer — TxChainTail 2-tx 패턴
+// =============================================================================
+//
+//  쓰기 흐름:
+//    1. sendCode × N (chunk inscription, 데이터를 calldata에만 저장)
+//    2. userInventoryCodeIn(handle, tailTx, ..., beforeUserTx)
+//       - SDK가 userTxChainTail 읽어서 beforeUserTx로 전달
+//       - 컨트랙트가 staleness 체크
+//    3. updateUserTxChainTail(myTxHash) [payable, BASIC_FEE]
+//       - SDK가 step 2의 tx hash 전달, fee는 여기서 부과
+
 import { type Signer, parseEther } from "ethers";
 import { getContract } from "../../contract";
 import { CHUNK_SIZE, DIRECT_METADATA_MAX_BYTES, BASIC_FEE } from "../constants";
@@ -53,21 +65,28 @@ export async function codeIn(
   onProgress?: (pct: number) => void,
 ): Promise<string> {
   const dataStr = Array.isArray(data) ? data.join("") : data;
-  const { onChainPath, metadata } = await prepareUpload(signer, dataStr, onProgress);
+  const { onChainPath } = await prepareUpload(signer, dataStr, onProgress);
   const contract = getContract(signer);
+
   // handle = inline data or filename, tailTx = linked list tail or ""
-  const handle = onChainPath === "" ? metadata : (filename || "data");
+  const handle = onChainPath === "" ? dataStr : (filename || "data");
   const tailTx = onChainPath;
+
+  // Read current chain tail to pass as beforeUserTx (staleness check)
+  const userAddress = await signer.getAddress();
+  const beforeUserTx = await contract.userTxChainTail(userAddress);
+
   const tx = await contract.userInventoryCodeIn(
     handle,
     tailTx,
     filetype || "text/plain",
     "0",
-    { value: parseEther(BASIC_FEE) },
+    beforeUserTx,
   );
   const txHash = (await tx.wait())!.hash;
-  // update user chain pointer so walkEventChain can traverse
-  const ptrTx = await contract.updateUserChainTx(txHash);
+
+  // Advance chain tail (fee charged here)
+  const ptrTx = await contract.updateUserTxChainTail(txHash, { value: parseEther(BASIC_FEE) });
   await ptrTx.wait();
   return txHash;
 }

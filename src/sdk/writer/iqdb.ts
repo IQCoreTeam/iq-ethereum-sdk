@@ -1,3 +1,13 @@
+// =============================================================================
+//  IQDB + Connection Writer — TxChainTail 2-tx 패턴
+// =============================================================================
+//
+//  writeRow / manageRowData / writeConnectionRow:
+//    1. prepareUpload (inline or sendCode chain)
+//    2. read current txChainTail → pass as beforeDataTx (staleness check)
+//    3. dbCodeIn / dbInstructionCodeIn / walletConnectionCodeIn (no fee)
+//    4. updateXxxTxChainTail(myTxHash) [payable, LINKED_LIST_FEE]
+
 import { type Signer, parseEther, toUtf8Bytes, ZeroAddress, id as keccak } from "ethers";
 import { getContract } from "../../contract";
 import { LINKED_LIST_FEE } from "../constants";
@@ -73,10 +83,16 @@ export async function writeRow(
 ) {
   const { onChainPath, metadata } = await prepareUpload(signer, rowJson, onProgress);
   const c = getContract(signer);
-  const tx = await c.dbCodeIn(toSeed(dbRootId), toSeed(tableSeed), onChainPath, metadata, fee);
+  const rootIdBytes = toSeed(dbRootId);
+  const seedBytes = toSeed(tableSeed);
+
+  const table = await c.getTable(rootIdBytes, seedBytes);
+  const beforeDataTx: string = table.txChainTail;
+
+  const tx = await c.dbCodeIn(rootIdBytes, seedBytes, onChainPath, metadata, beforeDataTx);
   const txHash = (await tx.wait())!.hash;
-  // update table pointer so walkEventChain can traverse by dbCodeIn tx hash
-  const ptrTx = await c.updateTableChainTx(toSeed(dbRootId), toSeed(tableSeed), txHash);
+
+  const ptrTx = await c.updateTableTxChainTail(rootIdBytes, seedBytes, txHash, fee);
   await ptrTx.wait();
   return txHash;
 }
@@ -90,12 +106,18 @@ export async function manageRowData(
 ) {
   const { onChainPath, metadata } = await prepareUpload(signer, rowJson);
   const c = getContract(signer);
-  const table = await c.getTable(toSeed(dbRootId), toSeed(tableSeed));
+  const rootIdBytes = toSeed(dbRootId);
+  const seedBytes = toSeed(tableSeed);
+
+  const table = await c.getTable(rootIdBytes, seedBytes);
+  const beforeDataTx: string = table.txChainTail;
+
   const tx = await c.dbInstructionCodeIn(
-    toSeed(dbRootId), toSeed(tableSeed), table.name, targetTx, onChainPath, metadata, fee,
+    rootIdBytes, seedBytes, table.name, targetTx, onChainPath, metadata, beforeDataTx,
   );
   const txHash = (await tx.wait())!.hash;
-  const ptrTx = await c.updateTableChainTx(toSeed(dbRootId), toSeed(tableSeed), txHash);
+
+  const ptrTx = await c.updateTableTxChainTail(rootIdBytes, seedBytes, txHash, fee);
   await ptrTx.wait();
   return txHash;
 }
@@ -140,9 +162,20 @@ export async function writeConnectionRow(
   const connectionSeed = deriveDmSeed(sender, otherParty);
   const { onChainPath, metadata } = await prepareUpload(signer, rowJson, onProgress);
   const c = getContract(signer);
-  const tx = await c.walletConnectionCodeIn(otherParty, toSeed(dbRootId), connectionSeed, onChainPath, metadata);
+  const rootIdBytes = toSeed(dbRootId);
+
+  const connKey = await c.getConnectionKey(sender, otherParty, rootIdBytes, connectionSeed);
+  const conn = await c.getConnection(connKey);
+  const beforeDataTx: string = conn.txChainTail;
+
+  const tx = await c.walletConnectionCodeIn(
+    otherParty, rootIdBytes, connectionSeed, onChainPath, metadata, beforeDataTx,
+  );
   const txHash = (await tx.wait())!.hash;
-  const ptrTx = await c.updateConnectionChainTx(otherParty, toSeed(dbRootId), connectionSeed, txHash);
+
+  const ptrTx = await c.updateConnectionTxChainTail(
+    otherParty, rootIdBytes, connectionSeed, txHash, fee,
+  );
   await ptrTx.wait();
   return txHash;
 }

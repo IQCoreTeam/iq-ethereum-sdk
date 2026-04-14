@@ -1,13 +1,11 @@
 import "dotenv/config";
 import { Wallet } from "ethers";
-import { setRpcUrl } from "../src/sdk/utils/provider";
-import { getProvider } from "../src/sdk/utils/provider";
-import { getContract } from "../src/contract";
+import { setRpcUrl, getProvider } from "../src/sdk/utils/provider";
 import { codeIn } from "../src/sdk/writer/code_in";
 import { readCodeIn } from "../src/sdk/reader/read_code_in";
 import { readUserState, fetchInventoryTransactions } from "../src/sdk/reader/reading_flow";
 import { initializeDbRoot, createTable, writeRow, updateUserMetadata } from "../src/sdk/writer/iqdb";
-import { getTablelistFromRoot, fetchTableMeta, readTableRows } from "../src/sdk/reader/iqdb";
+import { fetchTableMeta, readTableRows } from "../src/sdk/reader/iqdb";
 
 setRpcUrl(process.env.SEPOLIA_RPC_URL!);
 const signer = new Wallet(process.env.PRIVATE_KEY!, getProvider());
@@ -31,14 +29,7 @@ async function main() {
   console.log("Signer:", addr);
   console.log("Balance:", (await getProvider().getBalance(addr)).toString());
 
-  // 1. userInitialize
-  await log("userInitialize", async () => {
-    const c = getContract(signer);
-    const tx = await c.userInitialize();
-    return (await tx.wait())!.hash;
-  });
-
-  // 2. sendCode (single chunk, inline)
+  // 1. sendCode (single chunk, inline)
   const codeTx = await log("codeIn (small data)", async () => {
     return await codeIn(signer, "Hello from IQ Ethereum SDK!", "test.txt", "text/plain");
   });
@@ -82,28 +73,59 @@ async function main() {
     return await createTable(signer, dbId, tableId, "Users Table", ["id", "name", "email"], "id");
   });
 
-  // 10. writeRow
-  const rowTx = await log("writeRow", async () => {
-    return await writeRow(signer, dbId, tableId, JSON.stringify({ id: "1", name: "Alice", email: "alice@test.com" }));
-  });
+  // 10. writeRow × 3 (TxChain 역순회 검증용)
+  const rows = [
+    { id: "1", name: "Alice", email: "alice@test.com" },
+    { id: "2", name: "Bob", email: "bob@test.com" },
+    { id: "3", name: "Charlie", email: "charlie@test.com" },
+  ];
+  for (const row of rows) {
+    await log(`writeRow (${row.name})`, async () => {
+      return await writeRow(signer, dbId, tableId, JSON.stringify(row));
+    });
+  }
 
   // 11. fetchTableMeta
   await log("fetchTableMeta", async () => {
     return await fetchTableMeta(dbId, tableId);
   });
 
-  // 12. readTableRows
-  await log("readTableRows", async () => {
-    return await readTableRows(dbId, tableId, { limit: 5 });
+  // 12. readTableRows — 3개 다 역순회 되는지 확인
+  await log("readTableRows (expect 3, newest first)", async () => {
+    const result = await readTableRows(dbId, tableId, { limit: 10 });
+    console.log(`  count: ${result.length}`);
+    const names = result.map((r: any) => r.data?.name);
+    console.log(`  order: ${JSON.stringify(names)}`);
+    const expected = ["Charlie", "Bob", "Alice"];
+    const match = JSON.stringify(names) === JSON.stringify(expected);
+    console.log(`  match newest→oldest: ${match}`);
+    return { count: result.length, names, match };
   });
 
-  // 13. sendCode (multi chunk, linked list)
+  // 13. codeIn × 3 (user TxChain 역순회 검증용)
+  const inventories = ["first.txt", "second.txt", "third.txt"];
+  for (const name of inventories) {
+    await log(`codeIn (${name})`, async () => {
+      return await codeIn(signer, `content of ${name}`, name, "text/plain");
+    });
+  }
+
+  // 14. fetchInventoryTransactions — 역순회 결과 확인
+  await log("fetchInventoryTransactions (expect ≥4 newest first)", async () => {
+    const result = await fetchInventoryTransactions(addr, { limit: 10 });
+    console.log(`  count: ${result.length}`);
+    const handles = result.map((r) => r.handle);
+    console.log(`  handles: ${JSON.stringify(handles)}`);
+    return { count: result.length, handles };
+  });
+
+  // 15. codeIn (multi chunk, linked list)
   const bigData = "X".repeat(2000);
   const bigTx = await log("codeIn (big data, linked list)", async () => {
     return await codeIn(signer, bigData, "big.txt", "text/plain", (pct) => console.log(`  progress: ${pct.toFixed(0)}%`));
   });
 
-  // 14. readCodeIn (big data)
+  // 16. readCodeIn (big data)
   if (bigTx) {
     await log("readCodeIn (big data)", async () => {
       const result = await readCodeIn(bigTx);
