@@ -1,14 +1,14 @@
 // =============================================================================
-//  Code-In Writer — TxChainTail 2-tx 패턴
+//  Code-In Writer — TxChainTail 2-tx pattern
 // =============================================================================
 //
-//  쓰기 흐름:
-//    1. sendCode × N (chunk inscription, 데이터를 calldata에만 저장)
+//  Write flow:
+//    1. sendCode × N (chunk inscription, data lives in calldata only)
 //    2. userInventoryCodeIn(handle, tailTx, ..., beforeUserTx)
-//       - SDK가 userTxChainTail 읽어서 beforeUserTx로 전달
-//       - 컨트랙트가 staleness 체크
+//       - SDK reads userTxChainTail and passes it as beforeUserTx
+//       - Contract does a staleness check
 //    3. updateUserTxChainTail(myTxHash) [payable, BASIC_FEE]
-//       - SDK가 step 2의 tx hash 전달, fee는 여기서 부과
+//       - SDK passes the tx hash from step 2; fee is charged here
 
 import { type Signer, parseEther } from "ethers";
 import { getContract } from "../../contract";

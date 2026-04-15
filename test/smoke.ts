@@ -73,7 +73,7 @@ async function main() {
     return await createTable(signer, dbId, tableId, "Users Table", ["id", "name", "email"], "id");
   });
 
-  // 10. writeRow × 3 (TxChain 역순회 검증용)
+  // 10. writeRow × 3 (verify TxChain reverse traversal)
   const rows = [
     { id: "1", name: "Alice", email: "alice@test.com" },
     { id: "2", name: "Bob", email: "bob@test.com" },
@@ -90,7 +90,7 @@ async function main() {
     return await fetchTableMeta(dbId, tableId);
   });
 
-  // 12. readTableRows — 3개 다 역순회 되는지 확인
+  // 12. readTableRows — confirm all 3 are traversed in reverse
   await log("readTableRows (expect 3, newest first)", async () => {
     const result = await readTableRows(dbId, tableId, { limit: 10 });
     console.log(`  count: ${result.length}`);
@@ -102,7 +102,7 @@ async function main() {
     return { count: result.length, names, match };
   });
 
-  // 13. codeIn × 3 (user TxChain 역순회 검증용)
+  // 13. codeIn × 3 (verify user TxChain reverse traversal)
   const inventories = ["first.txt", "second.txt", "third.txt"];
   for (const name of inventories) {
     await log(`codeIn (${name})`, async () => {
@@ -110,7 +110,7 @@ async function main() {
     });
   }
 
-  // 14. fetchInventoryTransactions — 역순회 결과 확인
+  // 14. fetchInventoryTransactions — verify reverse traversal output
   await log("fetchInventoryTransactions (expect ≥4 newest first)", async () => {
     const result = await fetchInventoryTransactions(addr, { limit: 10 });
     console.log(`  count: ${result.length}`);

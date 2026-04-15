@@ -1,10 +1,10 @@
 // =============================================================================
-//  TxChain Reader — 연결리스트 순회 (SDK 핵심)
+//  TxChain Reader — linked-list traversal (SDK core)
 // =============================================================================
 //
-//  이더리움 컨트랙트의 구조:
+//  Ethereum contract layout:
 //
-//    userTxChainTail (mapping) ── 최신 userInventoryCodeIn tx hash
+//    userTxChainTail (mapping) ── latest userInventoryCodeIn tx hash
 //           │
 //           ▼
 //    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
@@ -16,10 +16,10 @@
 //           sendCode chain       sendCode chain
 //           (calldata only)      (calldata only)
 //
-//  - "포인터 체인": userInventoryCodeIn tx들이 calldata의 beforeUserTx로 서로 연결
-//  - "데이터 체인": 각 노드의 tailTx에서 시작하는 sendCode 순차 호출
+//  - "pointer chain": userInventoryCodeIn txs are linked via calldata beforeUserTx.
+//  - "data chain": each node's tailTx starts a sendCode sequence holding the payload.
 //
-//  Table, Connection도 동일 패턴 (txChainTail 필드 + dbCodeIn/walletConnectionCodeIn의 beforeDataTx).
+//  Table and Connection follow the same pattern (txChainTail + beforeDataTx in dbCodeIn / walletConnectionCodeIn).
 
 import { getContract } from "../../contract";
 import { getProvider } from "../utils/provider";

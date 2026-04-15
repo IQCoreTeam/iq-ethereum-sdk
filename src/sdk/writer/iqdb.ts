@@ -1,12 +1,18 @@
 // =============================================================================
-//  IQDB + Connection Writer — TxChainTail 2-tx 패턴
+//  IQDB + Connection Writer — TxChainTail 2-tx pattern
 // =============================================================================
 //
-//  writeRow / manageRowData / writeConnectionRow:
+//  Naming convention: every SDK writer accepts the raw human-readable
+//  `tableName` (or `dbRootId`). Conversion to bytes32 seeds happens in one
+//  place, `toSeed`, which is just `keccak256(utf8(name))`. The contract
+//  stores the raw name alongside the seed in DbRoot, so reads can surface
+//  the full name without ever re-hashing.
+//
+//  writeRow / manageRowData / writeConnectionRow follow the two-tx pattern:
 //    1. prepareUpload (inline or sendCode chain)
-//    2. read current txChainTail → pass as beforeDataTx (staleness check)
-//    3. dbCodeIn / dbInstructionCodeIn / walletConnectionCodeIn (no fee)
-//    4. updateXxxTxChainTail(myTxHash) [payable, LINKED_LIST_FEE]
+//    2. dbCodeIn / dbInstructionCodeIn / walletConnectionCodeIn
+//       (passes the current txChainTail as beforeDataTx for staleness check)
+//    3. updateXxxTxChainTail(myTxHash) [payable, LINKED_LIST_FEE]
 
 import { type Signer, parseEther, toUtf8Bytes, ZeroAddress, id as keccak } from "ethers";
 import { getContract } from "../../contract";
@@ -35,7 +41,6 @@ export async function manageTableCreators(
 export async function createTable(
   signer: Signer,
   dbRootId: string,
-  tableSeed: string,
   tableName: string,
   columns: string[],
   idCol: string,
@@ -46,7 +51,7 @@ export async function createTable(
 ) {
   const c = getContract(signer);
   const args = [
-    toSeed(dbRootId), toSeed(tableSeed), toBytes(tableName),
+    toSeed(dbRootId), tableName,
     columns.map(toBytes), toBytes(idCol), extKeys.map(toBytes), gate, writers,
   ] as const;
   const tx = isPrivate
@@ -58,7 +63,6 @@ export async function createTable(
 export async function updateTable(
   signer: Signer,
   dbRootId: string,
-  tableSeed: string,
   tableName: string,
   columns: string[],
   idCol: string,
@@ -68,7 +72,7 @@ export async function updateTable(
 ) {
   const c = getContract(signer);
   const tx = await c.updateTable(
-    toSeed(dbRootId), toSeed(tableSeed), toBytes(tableName),
+    toSeed(dbRootId), tableName,
     columns.map(toBytes), toBytes(idCol), extKeys.map(toBytes), gate, writers,
   );
   return (await tx.wait())!.hash;
@@ -77,22 +81,22 @@ export async function updateTable(
 export async function writeRow(
   signer: Signer,
   dbRootId: string,
-  tableSeed: string,
+  tableName: string,
   rowJson: string,
   onProgress?: (pct: number) => void,
 ) {
   const { onChainPath, metadata } = await prepareUpload(signer, rowJson, onProgress);
   const c = getContract(signer);
   const rootIdBytes = toSeed(dbRootId);
-  const seedBytes = toSeed(tableSeed);
+  const tableSeed = toSeed(tableName);
 
-  const table = await c.getTable(rootIdBytes, seedBytes);
+  const table = await c.getTable(rootIdBytes, tableSeed);
   const beforeDataTx: string = table.txChainTail;
 
-  const tx = await c.dbCodeIn(rootIdBytes, seedBytes, onChainPath, metadata, beforeDataTx);
+  const tx = await c.dbCodeIn(rootIdBytes, tableSeed, onChainPath, metadata, beforeDataTx);
   const txHash = (await tx.wait())!.hash;
 
-  const ptrTx = await c.updateTableTxChainTail(rootIdBytes, seedBytes, txHash, fee);
+  const ptrTx = await c.updateTableTxChainTail(rootIdBytes, tableSeed, txHash, fee);
   await ptrTx.wait();
   return txHash;
 }
@@ -100,24 +104,24 @@ export async function writeRow(
 export async function manageRowData(
   signer: Signer,
   dbRootId: string,
-  tableSeed: string,
+  tableName: string,
   rowJson: string,
   targetTx: string,
 ) {
   const { onChainPath, metadata } = await prepareUpload(signer, rowJson);
   const c = getContract(signer);
   const rootIdBytes = toSeed(dbRootId);
-  const seedBytes = toSeed(tableSeed);
+  const tableSeed = toSeed(tableName);
 
-  const table = await c.getTable(rootIdBytes, seedBytes);
+  const table = await c.getTable(rootIdBytes, tableSeed);
   const beforeDataTx: string = table.txChainTail;
 
   const tx = await c.dbInstructionCodeIn(
-    rootIdBytes, seedBytes, table.name, targetTx, onChainPath, metadata, beforeDataTx,
+    rootIdBytes, tableSeed, targetTx, onChainPath, metadata, beforeDataTx,
   );
   const txHash = (await tx.wait())!.hash;
 
-  const ptrTx = await c.updateTableTxChainTail(rootIdBytes, seedBytes, txHash, fee);
+  const ptrTx = await c.updateTableTxChainTail(rootIdBytes, tableSeed, txHash, fee);
   await ptrTx.wait();
   return txHash;
 }
@@ -136,7 +140,7 @@ export async function requestConnection(
   const c = getContract(signer);
   const tx = await c.requestConnection(
     toSeed(dbRootId), connectionSeed, receiver,
-    toBytes(tableName), columns.map(toBytes), toBytes(idCol), extKeys.map(toBytes), fee,
+    tableName, columns.map(toBytes), toBytes(idCol), extKeys.map(toBytes), fee,
   );
   return (await tx.wait())!.hash;
 }

@@ -4,20 +4,41 @@ import { getProvider } from "../utils/provider";
 import { deriveDmSeed } from "../utils/hash";
 import { walkCalldataChain, readSendCodeChain, isEnd } from "./txchain";
 
+// Every reader accepts the raw, human-readable tableName (never a
+// pre-hashed seed). Keccak only happens here.
 function toSeed(s: string) { return keccak(s); }
 
 const STATUS_MAP = ["pending", "approved", "blocked"] as const;
 
-export async function getTablelistFromRoot(dbRootId: string) {
-  const c = getContract(getProvider());
-  const root = await c.dbRoots(toSeed(dbRootId));
-  if (!root.exists) throw new Error("DbRoot not found");
-  return { creator: root.creator, tableSeeds: root.tableSeeds, globalTableSeeds: root.globalTableSeeds };
+export interface TableEntry {
+  name: string;      // full human name, e.g. "users.eu.west"
+  seedHex: string;   // keccak256(name) = mapping key
 }
 
-export async function fetchTableMeta(dbRootId: string, tableSeed: string) {
+export async function getTablelistFromRoot(dbRootId: string): Promise<{
+  creator: string;
+  tables: TableEntry[];        // public list (tableSeeds / tableNames)
+  globalTables: TableEntry[];  // all tables ever created under this root
+}> {
+  // Solidity's auto-generated `dbRoots(bytes32)` getter cannot return dynamic
+  // array fields, so we call the explicit `getDbRoot(bytes32)` view instead.
   const c = getContract(getProvider());
-  const table = await c.getTable(toSeed(dbRootId), toSeed(tableSeed));
+  const root = await c.getDbRoot(toSeed(dbRootId));
+  if (!root.exists) throw new Error("DbRoot not found");
+
+  const zip = (seeds: string[], names: string[]): TableEntry[] =>
+    seeds.map((seedHex, i) => ({ name: names[i] ?? "", seedHex }));
+
+  return {
+    creator: root.creator as string,
+    tables: zip([...root.tableSeeds], [...root.tableNames]),
+    globalTables: zip([...root.globalTableSeeds], [...root.globalTableNames]),
+  };
+}
+
+export async function fetchTableMeta(dbRootId: string, tableName: string) {
+  const c = getContract(getProvider());
+  const table = await c.getTable(toSeed(dbRootId), toSeed(tableName));
   if (!table.exists) throw new Error("Table not found");
   return table;
 }
@@ -38,10 +59,10 @@ function tryParse(data: string): any {
 
 export async function readTableRows(
   dbRootId: string,
-  tableSeed: string,
+  tableName: string,
   options?: { limit?: number },
 ) {
-  const table = await fetchTableMeta(dbRootId, tableSeed);
+  const table = await fetchTableMeta(dbRootId, tableName);
   if (isEnd(table.txChainTail)) return [];
 
   const entries = await walkCalldataChain(table.txChainTail, "beforeDataTx", options);

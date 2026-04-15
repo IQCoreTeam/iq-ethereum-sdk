@@ -269,9 +269,9 @@ export const CODEIN_ABI = [
         "type": "bytes"
       },
       {
-        "internalType": "bytes",
+        "internalType": "string",
         "name": "name",
-        "type": "bytes"
+        "type": "string"
       },
       {
         "components": [
@@ -347,14 +347,9 @@ export const CODEIN_ABI = [
         "type": "bytes32"
       },
       {
-        "internalType": "bytes32",
-        "name": "tableSeed",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes",
+        "internalType": "string",
         "name": "tableName",
-        "type": "bytes"
+        "type": "string"
       },
       {
         "internalType": "bytes[]",
@@ -412,14 +407,9 @@ export const CODEIN_ABI = [
         "type": "bytes32"
       },
       {
-        "internalType": "bytes32",
-        "name": "tableSeed",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes",
+        "internalType": "string",
         "name": "tableName",
-        "type": "bytes"
+        "type": "string"
       },
       {
         "internalType": "bytes[]",
@@ -515,11 +505,6 @@ export const CODEIN_ABI = [
         "type": "bytes32"
       },
       {
-        "internalType": "bytes",
-        "name": "tableName",
-        "type": "bytes"
-      },
-      {
         "internalType": "string",
         "name": "targetTx",
         "type": "string"
@@ -602,9 +587,9 @@ export const CODEIN_ABI = [
             "type": "bytes[]"
           },
           {
-            "internalType": "bytes",
+            "internalType": "string",
             "name": "name",
-            "type": "bytes"
+            "type": "string"
           },
           {
             "components": [
@@ -717,6 +702,67 @@ export const CODEIN_ABI = [
         "internalType": "bytes32",
         "name": "dbRootId",
         "type": "bytes32"
+      }
+    ],
+    "name": "getDbRoot",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "creator",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32[]",
+            "name": "tableSeeds",
+            "type": "bytes32[]"
+          },
+          {
+            "internalType": "string[]",
+            "name": "tableNames",
+            "type": "string[]"
+          },
+          {
+            "internalType": "bytes32[]",
+            "name": "globalTableSeeds",
+            "type": "bytes32[]"
+          },
+          {
+            "internalType": "string[]",
+            "name": "globalTableNames",
+            "type": "string[]"
+          },
+          {
+            "internalType": "address[]",
+            "name": "tableCreators",
+            "type": "address[]"
+          },
+          {
+            "internalType": "address[]",
+            "name": "extCreators",
+            "type": "address[]"
+          },
+          {
+            "internalType": "bool",
+            "name": "exists",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct IQDB.DbRoot",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "dbRootId",
+        "type": "bytes32"
       },
       {
         "internalType": "bytes32",
@@ -744,9 +790,9 @@ export const CODEIN_ABI = [
             "type": "bytes[]"
           },
           {
-            "internalType": "bytes",
+            "internalType": "string",
             "name": "name",
-            "type": "bytes"
+            "type": "string"
           },
           {
             "internalType": "int64",
@@ -914,9 +960,9 @@ export const CODEIN_ABI = [
         "type": "bytes32"
       },
       {
-        "internalType": "bytes32",
-        "name": "tableSeed",
-        "type": "bytes32"
+        "internalType": "string",
+        "name": "tableName",
+        "type": "string"
       }
     ],
     "name": "onboardTable",
@@ -955,9 +1001,9 @@ export const CODEIN_ABI = [
         "type": "address"
       },
       {
-        "internalType": "bytes",
+        "internalType": "string",
         "name": "tableName",
-        "type": "bytes"
+        "type": "string"
       },
       {
         "internalType": "bytes[]",
@@ -1044,9 +1090,9 @@ export const CODEIN_ABI = [
         "type": "bytes32"
       },
       {
-        "internalType": "bytes32[]",
-        "name": "newTableSeeds",
-        "type": "bytes32[]"
+        "internalType": "string[]",
+        "name": "newTableNames",
+        "type": "string[]"
       }
     ],
     "name": "updateDbRootTableList",
@@ -1062,14 +1108,9 @@ export const CODEIN_ABI = [
         "type": "bytes32"
       },
       {
-        "internalType": "bytes32",
-        "name": "tableSeed",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes",
+        "internalType": "string",
         "name": "tableName",
-        "type": "bytes"
+        "type": "string"
       },
       {
         "internalType": "bytes[]",
