@@ -24,7 +24,35 @@ export function toChunks(data: string | string[]): string[] {
   return chunks.length ? chunks : [""];
 }
 
-const MAX_CHUNKS_PER_TX = 400;
+// Ethereum limits a transaction's total size to 128 KB (131072 bytes) —
+// anything larger is rejected by most RPC providers (including Alchemy /
+// Infura) with `oversized data`. We budget a conservative 96 KB of payload
+// per sendCode batch to leave room for ABI encoding overhead (each dynamic
+// string costs 32 bytes of length prefix + padding), the beforeTx field, the
+// function selector, and signature.
+const MAX_BATCH_PAYLOAD_BYTES = 96 * 1024;
+
+// Split `chunks` into batches such that each batch's total UTF-8 byte size
+// stays under MAX_BATCH_PAYLOAD_BYTES. A single chunk that exceeds the budget
+// is still accepted as its own batch — CHUNK_SIZE should already be well
+// below the limit, but this keeps the function total.
+const batchChunks = (chunks: string[]): string[][] => {
+  const batches: string[][] = [];
+  let current: string[] = [];
+  let size = 0;
+  for (const chunk of chunks) {
+    const chunkBytes = Buffer.byteLength(chunk, "utf8");
+    if (current.length > 0 && size + chunkBytes > MAX_BATCH_PAYLOAD_BYTES) {
+      batches.push(current);
+      current = [];
+      size = 0;
+    }
+    current.push(chunk);
+    size += chunkBytes;
+  }
+  if (current.length > 0) batches.push(current);
+  return batches;
+};
 
 export async function uploadLinkedList(
   signer: Signer,
@@ -32,13 +60,15 @@ export async function uploadLinkedList(
   onProgress?: (pct: number) => void,
 ): Promise<string> {
   const contract = getContract(signer);
+  const batches = batchChunks(chunks);
   let beforeTx = "Genesis";
-  for (let i = 0; i < chunks.length; i += MAX_CHUNKS_PER_TX) {
-    const batch = chunks.slice(i, i + MAX_CHUNKS_PER_TX);
+  let sentChunks = 0;
+  for (const batch of batches) {
     const tx = await contract.sendCode(batch, beforeTx, 0, 0);
     const receipt = await tx.wait();
     beforeTx = receipt!.hash;
-    onProgress?.(Math.min(i + batch.length, chunks.length) / chunks.length * 100);
+    sentChunks += batch.length;
+    onProgress?.((sentChunks / chunks.length) * 100);
   }
   return beforeTx;
 }
