@@ -10,9 +10,10 @@
 //    3. updateUserTxChainTail(myTxHash) [payable, BASIC_FEE]
 //       - SDK passes the tx hash from step 2; fee is charged here
 
-import { type Signer, parseEther } from "ethers";
+import { type Signer } from "ethers";
 import { getContract } from "../../contract";
-import { CHUNK_SIZE, DIRECT_METADATA_MAX_BYTES, BASIC_FEE } from "../constants";
+import { CHUNK_SIZE, DIRECT_METADATA_MAX_BYTES } from "../constants";
+import { getBasicFee } from "../utils/fees";
 
 export function toChunks(data: string | string[]): string[] {
   if (Array.isArray(data)) return data;
@@ -115,8 +116,10 @@ export async function codeIn(
   );
   const txHash = (await tx.wait())!.hash;
 
-  // Advance chain tail (fee charged here)
-  const ptrTx = await contract.updateUserTxChainTail(txHash, { value: parseEther(BASIC_FEE) });
+  // Advance chain tail (fee charged here). Fee is read from the contract so
+  // it matches the active network (e.g. 0.0001 ETH on Sepolia, 6.5 MON on Monad).
+  const value = await getBasicFee(signer);
+  const ptrTx = await contract.updateUserTxChainTail(txHash, { value });
   await ptrTx.wait();
   return txHash;
 }

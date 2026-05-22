@@ -26,6 +26,7 @@ npm install @iqlabs-official/ethereum-sdk
    - [Table Management](#table-management)
    - [Encryption](#encryption)
    - [Environment Settings](#environment-settings)
+   - [Network Selection](#network-selection)
 
 2.1. [Advanced Functions](#advanced-functions) (list only)
 
@@ -596,16 +597,70 @@ These are advanced/internal helpers; this doc lists them only. See API docs (in 
 
 ---
 
+### Network Selection
+
+The SDK supports multiple EVM networks. The active network determines both the RPC endpoint and the deployed contract address that readers/writers talk to. Default is `sepolia`.
+
+#### `setNetwork()`
+
+Switch the active network mode. Call this once at app startup (e.g. on page load) before any reader/writer call.
+
+| **Parameters** | `mode`: `"sepolia" \| "monad"`<br>`rpcUrl`: optional override (string) — defaults to the chain's public RPC |
+|----------|--------------------------|
+| **Returns** | void |
+
+**Example:**
+```typescript
+import iqlabs from '@iqlabs-official/ethereum-sdk';
+
+// Sepolia (default — usually no call needed)
+iqlabs.setNetwork('sepolia');
+
+// Monad mainnet
+iqlabs.setNetwork('monad');
+
+// Or with a custom RPC (e.g. Alchemy)
+iqlabs.setNetwork('monad', 'https://your-alchemy-monad-url');
+```
+
+#### `getNetwork()`
+
+| **Returns** | `"sepolia" \| "monad"` — the currently active network |
+
+#### `assertChainMatches()`
+
+Throws if the configured RPC's chainId doesn't match the active network mode. Use defensively before sending a transaction if you don't fully control the user's RPC.
+
+```typescript
+await iqlabs.assertChainMatches(signer);
+```
+
+#### Supported Networks
+
+| Mode | Chain ID | Currency | Default RPC |
+|------|---------:|----------|-------------|
+| `sepolia` | 11155111 | ETH | https://rpc.sepolia.org |
+| `monad`   | 143      | MON | https://rpc.monad.xyz |
+
+---
+
 ## Contract
 
-Default deployed address (Sepolia): [`0xa580a977a3103565993531d19536220A54783397`](https://sepolia.etherscan.io/address/0xa580a977a3103565993531d19536220A54783397)
+Deployed addresses (resolved automatically from `setNetwork()`):
 
-To use a different deployment, pass the address to `getContract()`:
+| Network | Address |
+|---------|---------|
+| Sepolia | [`0xB1C16271954c7238672c3666FD22Ee14C6d065Db`](https://sepolia.etherscan.io/address/0xB1C16271954c7238672c3666FD22Ee14C6d065Db) |
+| Monad   | [`0xeFd9376835076Bf8d83826F6A2277BB5362Cd893`](https://monadvision.com/address/0xeFd9376835076Bf8d83826F6A2277BB5362Cd893) |
+
+To pin a specific deployment manually, pass the address directly:
 
 ```typescript
 import { getContract } from '@iqlabs-official/ethereum-sdk/dist/contract';
 const c = getContract(signer, '0xYourDeployment');
 ```
+
+> **Migrating from v0.1.0**: the default Sepolia address changed in v0.1.1 (new deployment with IQ-discount support and per-network fee setters). If you need to read data from the v0.1.0 contract (`0xa580a977a3103565993531d19536220A54783397`), pass it explicitly to `getContract()`.
 
 ---
 

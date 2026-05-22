@@ -14,15 +14,20 @@
 //       (passes the current txChainTail as beforeDataTx for staleness check)
 //    3. updateXxxTxChainTail(myTxHash) [payable, LINKED_LIST_FEE]
 
-import { type Signer, parseEther, toUtf8Bytes, ZeroAddress, id as keccak } from "ethers";
+import { type Signer, toUtf8Bytes, ZeroAddress, id as keccak } from "ethers";
 import { getContract } from "../../contract";
-import { LINKED_LIST_FEE } from "../constants";
 import { prepareUpload } from "./code_in";
 import { deriveDmSeed } from "../utils/hash";
+import { getLinkedListFee } from "../utils/fees";
 
 function toSeed(s: string) { return keccak(s); }
 function toBytes(s: string) { return toUtf8Bytes(s); }
-const fee = { value: parseEther(LINKED_LIST_FEE) };
+
+// Fee is read from the contract (per-network: 0.0003 ETH on Sepolia,
+// 19.5 MON on Monad) rather than hardcoded.
+async function linkedListFeeOpts(signer: Signer) {
+  return { value: await getLinkedListFee(signer) };
+}
 
 export async function initializeDbRoot(signer: Signer, dbRootId: string) {
   const c = getContract(signer);
@@ -54,6 +59,7 @@ export async function createTable(
     toSeed(dbRootId), tableName,
     columns.map(toBytes), toBytes(idCol), extKeys.map(toBytes), gate, writers,
   ] as const;
+  const fee = await linkedListFeeOpts(signer);
   const tx = isPrivate
     ? await c.createPrivateTable(...args, fee)
     : await c.createTable(...args, fee);
@@ -96,6 +102,7 @@ export async function writeRow(
   const tx = await c.dbCodeIn(rootIdBytes, tableSeed, onChainPath, metadata, beforeDataTx);
   const txHash = (await tx.wait())!.hash;
 
+  const fee = await linkedListFeeOpts(signer);
   const ptrTx = await c.updateTableTxChainTail(rootIdBytes, tableSeed, txHash, fee);
   await ptrTx.wait();
   return txHash;
@@ -121,6 +128,7 @@ export async function manageRowData(
   );
   const txHash = (await tx.wait())!.hash;
 
+  const fee = await linkedListFeeOpts(signer);
   const ptrTx = await c.updateTableTxChainTail(rootIdBytes, tableSeed, txHash, fee);
   await ptrTx.wait();
   return txHash;
@@ -138,6 +146,7 @@ export async function requestConnection(
   const sender = await signer.getAddress();
   const connectionSeed = deriveDmSeed(sender, receiver);
   const c = getContract(signer);
+  const fee = await linkedListFeeOpts(signer);
   const tx = await c.requestConnection(
     toSeed(dbRootId), connectionSeed, receiver,
     tableName, columns.map(toBytes), toBytes(idCol), extKeys.map(toBytes), fee,
@@ -177,6 +186,7 @@ export async function writeConnectionRow(
   );
   const txHash = (await tx.wait())!.hash;
 
+  const fee = await linkedListFeeOpts(signer);
   const ptrTx = await c.updateConnectionTxChainTail(
     otherParty, rootIdBytes, connectionSeed, txHash, fee,
   );

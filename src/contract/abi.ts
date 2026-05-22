@@ -1,7 +1,39 @@
 // ABI for the CodeIn contract (Inscription + IQDB + Connection combined)
 // sendCode is calldata-only (no event) for gas efficiency.
+// Generated from code-in-for-eth/artifacts/contracts/CodeIn.sol/CodeIn.json
 
 export const CODEIN_ABI = [
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_basicFee",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_linkedListFee",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_sessionFee",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_discountFee",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "_feeReceiver",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
   {
     "inputs": [],
     "name": "AlreadyExists",
@@ -65,6 +97,11 @@ export const CODEIN_ABI = [
   {
     "inputs": [],
     "name": "StaleTxChainTail",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroAddress",
     "type": "error"
   },
   {
@@ -203,6 +240,100 @@ export const CODEIN_ABI = [
     "inputs": [
       {
         "indexed": true,
+        "internalType": "address",
+        "name": "previousReceiver",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newReceiver",
+        "type": "address"
+      }
+    ],
+    "name": "FeeReceiverUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "basicFee",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "linkedListFee",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "sessionFee",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "discountFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "FeesUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "tokenType",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "holdMin",
+        "type": "uint256"
+      }
+    ],
+    "name": "IqTokenUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previousOwner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnershipTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
         "internalType": "bytes32",
         "name": "dbRootId",
         "type": "bytes32"
@@ -247,6 +378,19 @@ export const CODEIN_ABI = [
     ],
     "name": "UserInventoryCodeInEvent",
     "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "basicFee",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
   },
   {
     "inputs": [
@@ -549,6 +693,32 @@ export const CODEIN_ABI = [
         "internalType": "bool",
         "name": "exists",
         "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "discountFee",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "feeReceiver",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
       }
     ],
     "stateMutability": "view",
@@ -902,6 +1072,58 @@ export const CODEIN_ABI = [
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "iqHoldMin",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "iqToken",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "iqTokenType",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "linkedListFee",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "address",
@@ -984,6 +1206,13 @@ export const CODEIN_ABI = [
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "renounceOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "bytes32",
@@ -1050,6 +1279,96 @@ export const CODEIN_ABI = [
       }
     ],
     "name": "sendCode",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "sessionFee",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newReceiver",
+        "type": "address"
+      }
+    ],
+    "name": "setFeeReceiver",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_basicFee",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_linkedListFee",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_sessionFee",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_discountFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "setFees",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "internalType": "uint8",
+        "name": "tokenType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "holdMin",
+        "type": "uint256"
+      }
+    ],
+    "name": "setIqToken",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "transferOwnership",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
