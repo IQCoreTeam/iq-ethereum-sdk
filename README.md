@@ -2,7 +2,7 @@
 
 > **Draft**: This document is in progress and will be refined.
 
-The Ethereum port of the IQLabs SDK. Same primitives — on-chain data storage, IQDB tables, friend connections, and end-to-end encryption — built on `ethers v6` and a single deployed contract.
+The Ethereum port of the IQLabs SDK. Same primitives (on-chain data storage, IQDB tables, friend connections, and end-to-end encryption), built on `ethers v6` and a single deployed contract.
 
 ```bash
 npm install @iqlabs-official/ethereum-sdk
@@ -46,7 +46,7 @@ This is how you store any data (files, text, JSON) on-chain. Data is inscribed i
 
 Depending on data size, the SDK picks the optimal method:
 
-- **Inline (small)**: data fits in a single transaction's metadata field — no chunking
+- **Inline (small)**: data fits in a single transaction's metadata field, no chunking
 - **Linked list (large)**: data is split into chunks (`CHUNK_SIZE`), uploaded via `sendCode()` calls in batches up to ~96 KB each, and the tail tx hash is recorded
 
 #### Key related functions
@@ -58,11 +58,11 @@ Depending on data size, the SDK picks the optimal method:
 
 ### User State
 
-An on-chain record per user address — managed by the contract, not a separate account/PDA.
+An on-chain record per user address, managed by the contract, not a separate account/PDA.
 
 #### What gets stored?
 
-- User-set metadata (name, profile, bio — anything you serialize and pass to `updateUserMetadata`)
+- User-set metadata (name, profile, bio, anything you serialize and pass to `updateUserMetadata`)
 - `userTxChainTail`: the most recent inventory write, used as the head of the user's tx-chain
 
 #### When is it created?
@@ -99,7 +99,7 @@ Store JSON data in tables like a database.
 
 #### How are tables created?
 
-Use [`createTable()`](#createtable) before writing rows. (Unlike the Solana SDK, tables must exist before `writeRow()` is called — the row write reads the table's `txChainTail` for staleness check.)
+Use [`createTable()`](#createtable) before writing rows. (Unlike the Solana SDK, tables must exist before `writeRow()` is called, the row write reads the table's `txChainTail` for staleness check.)
 
 > **Note**: A table is uniquely identified by the combination of `dbRootId` and `tableName`. Both are hashed with `keccak256` internally to form mapping keys.
 
@@ -127,7 +127,7 @@ Tables can be gated so that only users holding a specific ERC-20 token or ERC-72
 #### How it works
 
 - **Table creator** sets the gate when creating or updating a table
-- **Writers** only need to hold the required asset — the contract checks balance on-chain when `writeRow()` is called
+- **Writers** only need to hold the required asset, the contract checks balance on-chain when `writeRow()` is called
 - If `tokenAddress` is `ZeroAddress`, the table is public (default behavior)
 
 #### Gate parameter
@@ -142,7 +142,7 @@ gate?: {
 
 #### Notes
 
-- For **token gates**, `amount` is the minimum balance required (e.g., 100 means "must hold >= 100 tokens", in raw units — apply your own decimal scaling)
+- For **token gates**, `amount` is the minimum balance required (e.g., 100 means "must hold >= 100 tokens", in raw units, apply your own decimal scaling)
 - For **collection gates**, the user can present any NFT from that collection. `amount` is ignored
 - Omitting `gate` (or passing `{ tokenAddress: ZeroAddress, amount: 0, gateType: 0 }`) creates a public table
 
@@ -160,7 +160,7 @@ The SDK includes a built-in encryption module (`iqlabs.crypto`) for encrypting d
 
 #### Key derivation
 
-Users can derive a deterministic X25519 keypair from their wallet signature using [`deriveX25519Keypair()`](#derivex25519keypair). Their wallet *is* the key — no separate keystore.
+Users can derive a deterministic X25519 keypair from their wallet signature using [`deriveX25519Keypair()`](#derivex25519keypair). Their wallet *is* the key, no separate keystore.
 
 #### Key related functions
 
@@ -244,7 +244,7 @@ await iqlabs.writer.requestConnection(
 
 #### `manageConnection()`
 
-| **Parameters** | `signer`: `ethers.Signer`<br>`otherParty`: counterparty address (string)<br>`dbRootId`: database ID (string)<br>`newStatus`: new status (number — `0` pending, `1` approved, `2` blocked) |
+| **Parameters** | `signer`: `ethers.Signer`<br>`otherParty`: counterparty address (string)<br>`dbRootId`: database ID (string)<br>`newStatus`: new status (number, `0` pending, `1` approved, `2` blocked) |
 |----------|--------------------------|
 | **Returns** | Transaction hash (string) |
 
@@ -559,7 +559,7 @@ iqlabs.setRpcUrl('https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY');
 
 #### `getRpcUrl()`
 
-| **Returns** | `string` — the currently configured RPC URL |
+| **Returns** | `string`, the currently configured RPC URL |
 
 ```typescript
 console.log(iqlabs.getRpcUrl());
@@ -587,7 +587,7 @@ await iqlabs.writer.updateUserMetadata(signer, JSON.stringify({ name: 'Alice', b
 These are advanced/internal helpers; this doc lists them only. See API docs (in progress) for details.
 
 - `prepareUpload()` / `uploadLinkedList()` / `toChunks()` (`writer`)
-- `manageRowData()` (`writer`) — overwrite a specific row by `targetTx`
+- `manageRowData()` (`writer`), overwrite a specific row by `targetTx`
 - `manageTableCreators()` (`writer`)
 - `readUserState()` (`reader`)
 - `fetchTableMeta()` (`reader`)
@@ -605,7 +605,7 @@ The SDK supports multiple EVM networks. The active network determines both the R
 
 Switch the active network mode. Call this once at app startup (e.g. on page load) before any reader/writer call.
 
-| **Parameters** | `mode`: `"sepolia" \| "monad"`<br>`rpcUrl`: optional override (string) — defaults to the chain's public RPC |
+| **Parameters** | `mode`: `"sepolia" \| "monad" \| "monadTestnet"`<br>`rpcUrl`: optional override (string). Defaults to the chain's public RPC. |
 |----------|--------------------------|
 | **Returns** | void |
 
@@ -613,11 +613,14 @@ Switch the active network mode. Call this once at app startup (e.g. on page load
 ```typescript
 import iqlabs from '@iqlabs-official/ethereum-sdk';
 
-// Sepolia (default — usually no call needed)
+// Sepolia (default, usually no call needed)
 iqlabs.setNetwork('sepolia');
 
 // Monad mainnet
 iqlabs.setNetwork('monad');
+
+// Monad testnet (free MON from faucet.monad.xyz)
+iqlabs.setNetwork('monadTestnet');
 
 // Or with a custom RPC (e.g. Alchemy)
 iqlabs.setNetwork('monad', 'https://your-alchemy-monad-url');
@@ -625,7 +628,7 @@ iqlabs.setNetwork('monad', 'https://your-alchemy-monad-url');
 
 #### `getNetwork()`
 
-| **Returns** | `"sepolia" \| "monad"` — the currently active network |
+| **Returns** | `"sepolia" \| "monad" \| "monadTestnet"`, the currently active network |
 
 #### `assertChainMatches()`
 
@@ -641,6 +644,9 @@ await iqlabs.assertChainMatches(signer);
 |------|---------:|----------|-------------|
 | `sepolia` | 11155111 | ETH | https://rpc.sepolia.org |
 | `monad`   | 143      | MON | https://rpc.monad.xyz |
+| `monadTestnet` | 10143 | MON | https://testnet-rpc.monad.xyz |
+
+For local development on Monad without spending real MON, use `monadTestnet` and fund your wallet from [faucet.monad.xyz](https://faucet.monad.xyz). The testnet contract has the same ABI and fees as mainnet, so it's an exact rehearsal. When ready, switch to `monad` with no other code changes.
 
 ---
 
@@ -652,6 +658,7 @@ Deployed addresses (resolved automatically from `setNetwork()`):
 |---------|---------|
 | Sepolia | [`0xB1C16271954c7238672c3666FD22Ee14C6d065Db`](https://sepolia.etherscan.io/address/0xB1C16271954c7238672c3666FD22Ee14C6d065Db) |
 | Monad   | [`0xeFd9376835076Bf8d83826F6A2277BB5362Cd893`](https://monadvision.com/address/0xeFd9376835076Bf8d83826F6A2277BB5362Cd893) |
+| Monad Testnet | [`0x88af59e58C7E5DcbE7cc12972B90cff3fEEF7223`](https://testnet.monadexplorer.com/address/0x88af59e58C7E5DcbE7cc12972B90cff3fEEF7223) |
 
 To pin a specific deployment manually, pass the address directly:
 

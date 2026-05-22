@@ -1,7 +1,7 @@
 // Network mode registry. Adding a new EVM chain = adding one entry here.
 // Default mode is "sepolia" so existing consumers keep working unchanged.
 
-export type NetworkMode = "sepolia" | "monad";
+export type NetworkMode = "sepolia" | "monad" | "monadTestnet";
 
 export interface NetworkConfig {
   chainId: number;
@@ -25,6 +25,13 @@ export const NETWORKS: Record<NetworkMode, NetworkConfig> = {
     contractAddress: "0xeFd9376835076Bf8d83826F6A2277BB5362Cd893",
     currency: "MON",
     explorer: "https://monadvision.com",
+  },
+  monadTestnet: {
+    chainId: 10143,
+    defaultRpc: "https://testnet-rpc.monad.xyz",
+    contractAddress: "0x88af59e58C7E5DcbE7cc12972B90cff3fEEF7223",
+    currency: "MON",
+    explorer: "https://testnet.monadexplorer.com",
   },
 };
 
