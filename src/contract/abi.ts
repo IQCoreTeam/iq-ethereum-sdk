@@ -26,6 +26,11 @@ export const CODEIN_ABI = [
         "type": "uint256"
       },
       {
+        "internalType": "uint256",
+        "name": "_tableCreationFee",
+        "type": "uint256"
+      },
+      {
         "internalType": "address",
         "name": "_feeReceiver",
         "type": "address"
@@ -240,6 +245,31 @@ export const CODEIN_ABI = [
     "inputs": [
       {
         "indexed": true,
+        "internalType": "bytes32",
+        "name": "dbRootId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previousCreator",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newCreator",
+        "type": "address"
+      }
+    ],
+    "name": "DbRootCreatorTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
         "internalType": "address",
         "name": "previousReceiver",
         "type": "address"
@@ -339,6 +369,31 @@ export const CODEIN_ABI = [
         "type": "bytes32"
       },
       {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "fee",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "isSet",
+        "type": "bool"
+      }
+    ],
+    "name": "RootTableCreationFeeUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "dbRootId",
+        "type": "bytes32"
+      },
+      {
         "indexed": true,
         "internalType": "bytes32",
         "name": "tableSeed",
@@ -346,6 +401,19 @@ export const CODEIN_ABI = [
       }
     ],
     "name": "TableCreated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "fee",
+        "type": "uint256"
+      }
+    ],
+    "name": "TableCreationFeeUpdated",
     "type": "event"
   },
   {
@@ -390,6 +458,19 @@ export const CODEIN_ABI = [
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "dbRootId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "clearRootTableCreationFee",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -633,7 +714,7 @@ export const CODEIN_ABI = [
     ],
     "name": "dbCodeIn",
     "outputs": [],
-    "stateMutability": "nonpayable",
+    "stateMutability": "payable",
     "type": "function"
   },
   {
@@ -692,6 +773,16 @@ export const CODEIN_ABI = [
       {
         "internalType": "bool",
         "name": "exists",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "tableCreationFeeOverride",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "tableCreationFeeIsSet",
         "type": "bool"
       }
     ],
@@ -916,6 +1007,16 @@ export const CODEIN_ABI = [
           {
             "internalType": "bool",
             "name": "exists",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint256",
+            "name": "tableCreationFeeOverride",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "tableCreationFeeIsSet",
             "type": "bool"
           }
         ],
@@ -1252,7 +1353,7 @@ export const CODEIN_ABI = [
     ],
     "name": "requestConnection",
     "outputs": [],
-    "stateMutability": "payable",
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -1363,6 +1464,68 @@ export const CODEIN_ABI = [
   {
     "inputs": [
       {
+        "internalType": "bytes32",
+        "name": "dbRootId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "newFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "setRootTableCreationFee",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "newFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "setTableCreationFee",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "tableCreationFee",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "dbRootId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "newCreator",
+        "type": "address"
+      }
+    ],
+    "name": "transferDbRootCreator",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "newOwner",
         "type": "address"
@@ -1398,7 +1561,7 @@ export const CODEIN_ABI = [
     ],
     "name": "updateConnectionTxChainTail",
     "outputs": [],
-    "stateMutability": "payable",
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -1499,7 +1662,7 @@ export const CODEIN_ABI = [
     ],
     "name": "updateTableTxChainTail",
     "outputs": [],
-    "stateMutability": "payable",
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -1525,7 +1688,7 @@ export const CODEIN_ABI = [
     ],
     "name": "updateUserTxChainTail",
     "outputs": [],
-    "stateMutability": "payable",
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -1582,7 +1745,7 @@ export const CODEIN_ABI = [
     ],
     "name": "userInventoryCodeIn",
     "outputs": [],
-    "stateMutability": "nonpayable",
+    "stateMutability": "payable",
     "type": "function"
   },
   {
@@ -1658,7 +1821,7 @@ export const CODEIN_ABI = [
     ],
     "name": "walletConnectionCodeIn",
     "outputs": [],
-    "stateMutability": "nonpayable",
+    "stateMutability": "payable",
     "type": "function"
   }
 ] as const;
