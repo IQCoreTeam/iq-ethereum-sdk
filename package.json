@@ -1,15 +1,25 @@
 {
   "name": "@iqlabs-official/ethereum-sdk",
-  "version": "0.1.3",
+  "version": "0.2.1",
   "description": "IQLabs Ethereum SDK",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/cjs/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/cjs/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
   "files": [
     "dist",
     "src"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:esm": "tsc -p tsconfig.esm.json && node scripts/fix-esm-extensions.cjs && node -e \"require('fs').writeFileSync('dist/esm/package.json', JSON.stringify({type:'module'},null,2))\"",
+    "build": "npm run build:cjs && npm run build:esm",
     "prepare": "npm run build",
     "test": "tsx test/smoke.ts"
   },

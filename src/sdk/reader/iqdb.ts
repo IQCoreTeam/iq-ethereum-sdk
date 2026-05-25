@@ -19,6 +19,8 @@ export async function getTablelistFromRoot(dbRootId: string): Promise<{
   creator: string;
   tables: TableEntry[];        // public list (tableSeeds / tableNames)
   globalTables: TableEntry[];  // all tables ever created under this root
+  tableCreationFeeOverride: bigint;
+  tableCreationFeeIsSet: boolean;
 }> {
   // Solidity's auto-generated `dbRoots(bytes32)` getter cannot return dynamic
   // array fields, so we call the explicit `getDbRoot(bytes32)` view instead.
@@ -33,6 +35,8 @@ export async function getTablelistFromRoot(dbRootId: string): Promise<{
     creator: root.creator as string,
     tables: zip([...root.tableSeeds], [...root.tableNames]),
     globalTables: zip([...root.globalTableSeeds], [...root.globalTableNames]),
+    tableCreationFeeOverride: root.tableCreationFeeOverride as bigint,
+    tableCreationFeeIsSet: root.tableCreationFeeIsSet as boolean,
   };
 }
 

@@ -4,4 +4,6 @@ export {
   writeRow, manageRowData,
   requestConnection, manageConnection, writeConnectionRow,
   updateUserMetadata,
+  setTableCreationFee, setRootTableCreationFee, clearRootTableCreationFee,
+  transferDbRootCreator,
 } from "./iqdb";

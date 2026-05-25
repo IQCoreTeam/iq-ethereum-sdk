@@ -9,4 +9,11 @@ export {
 export { deriveDmSeed } from "./hash";
 export { createRateLimiter } from "./rate_limiter";
 export { runWithConcurrency } from "./concurrency";
-export { getBasicFee, getLinkedListFee, clearFeeCache } from "./fees";
+export {
+  getBasicFee,
+  getLinkedListFee,
+  getTableCreationFee,
+  resolveCodeInFee,
+  getEffectiveTableCreationFee,
+  clearFeeCache,
+} from "./fees";
