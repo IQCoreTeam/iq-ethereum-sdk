@@ -11,9 +11,10 @@
 //         No value, no fee. Just advances the user's chain tail.
 
 import {type Signer} from "ethers";
-import {getContract} from "../../contract";
+import {getContract, NETWORKS} from "../../contract";
 import {CHUNK_SIZE, DIRECT_METADATA_MAX_BYTES} from "../constants";
 import {resolveCodeInFee} from "../utils/fees";
+import {getNetwork} from "../utils/provider";
 
 export function toChunks(data: string | string[]): string[] {
     if (Array.isArray(data)) return data;
@@ -25,25 +26,19 @@ export function toChunks(data: string | string[]): string[] {
     return chunks.length ? chunks : [""];
 }
 
-// Ethereum limits a transaction's total size to 128 KB (131072 bytes) —
-// anything larger is rejected by most RPC providers (including Alchemy /
-// Infura) with `oversized data`. We budget a conservative 96 KB of payload
-// per sendCode batch to leave room for ABI encoding overhead (each dynamic
-// string costs 32 bytes of length prefix + padding), the beforeTx field, the
-// function selector, and signature.
-const MAX_BATCH_PAYLOAD_BYTES = 96 * 1024;
-
 // Split `chunks` into batches such that each batch's total UTF-8 byte size
-// stays under MAX_BATCH_PAYLOAD_BYTES. A single chunk that exceeds the budget
-// is still accepted as its own batch — CHUNK_SIZE should already be well
-// below the limit, but this keeps the function total.
-const batchChunks = (chunks: string[]): string[][] => {
+// stays under the active network's maxBatchPayloadBytes (chains reject
+// oversized transactions; per-chain budgets live in NETWORKS). A single
+// chunk that exceeds the budget is still accepted as its own batch —
+// CHUNK_SIZE should already be well below the limit, but this keeps the
+// function total.
+const batchChunks = (chunks: string[], maxBatchPayloadBytes: number): string[][] => {
     const batches: string[][] = [];
     let current: string[] = [];
     let size = 0;
     for (const chunk of chunks) {
         const chunkBytes = Buffer.byteLength(chunk, "utf8");
-        if (current.length > 0 && size + chunkBytes > MAX_BATCH_PAYLOAD_BYTES) {
+        if (current.length > 0 && size + chunkBytes > maxBatchPayloadBytes) {
             batches.push(current);
             current = [];
             size = 0;
@@ -61,7 +56,7 @@ export async function uploadLinkedList(
     onProgress?: (pct: number) => void,
 ): Promise<string> {
     const contract = getContract(signer);
-    const batches = batchChunks(chunks);
+    const batches = batchChunks(chunks, NETWORKS[getNetwork()].maxBatchPayloadBytes);
     let beforeTx = "Genesis";
     let sentChunks = 0;
     for (const batch of batches) {
