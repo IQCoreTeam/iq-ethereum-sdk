@@ -48,9 +48,15 @@ export const NETWORKS: Record<NetworkMode, NetworkConfig> = {
     contractAddress: "0x88af59e58C7E5DcbE7cc12972B90cff3fEEF7223",
     currency: "ETH",
     explorer: "https://robinhoodchain.blockscout.com",
-    // Partner-measured on ~2 MB uploads (2026-09): 96 KB batches are
-    // rejected as "oversized data", 95 KB lands.
-    maxBatchPayloadBytes: 95 * 1024,
+    // This budget is the PAYLOAD (sum of chunk chars); ABI-encoding sendCode's
+    // string[] inflates it by ~9% into the actual tx calldata, and the
+    // Robinhood sequencer rejects a tx whose calldata is oversized. Measured
+    // 2026-09-26 on mainnet: 95 KB payload -> ~103 KB calldata -> "oversized
+    // data"; the calldata ceiling sits ~93 KB (100 chunks / 90.8 KB landed,
+    // 105 / 95.3 KB rejected). 80 KB payload -> ~87 KB calldata clears it with
+    // margin. An earlier note claimed 95 KB lands; that was payload, not the
+    // encoded calldata the sequencer actually checks.
+    maxBatchPayloadBytes: 80 * 1024,
   },
 };
 

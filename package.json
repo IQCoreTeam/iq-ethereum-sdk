@@ -1,6 +1,6 @@
 {
   "name": "@iqlabs-official/ethereum-sdk",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "IQLabs Ethereum SDK",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
