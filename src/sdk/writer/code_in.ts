@@ -15,6 +15,7 @@ import {getContract, NETWORKS} from "../../contract";
 import {CHUNK_SIZE, DIRECT_METADATA_MAX_BYTES} from "../constants";
 import {resolveCodeInFee} from "../utils/fees";
 import {getNetwork} from "../utils/provider";
+import {sendMined, UploadInterrupted, type UploadCheckpoint} from "./resilient";
 
 export function toChunks(data: string | string[]): string[] {
     if (Array.isArray(data)) return data;
@@ -54,15 +55,20 @@ export async function uploadLinkedList(
     signer: Signer,
     chunks: string[],
     onProgress?: (pct: number) => void,
+    resume?: UploadCheckpoint,
 ): Promise<string> {
     const contract = getContract(signer);
-    const batches = batchChunks(chunks, NETWORKS[getNetwork()].maxBatchPayloadBytes);
-    let beforeTx = "Genesis";
-    let sentChunks = 0;
+    const target = await contract.getAddress();
+    let beforeTx = resume?.beforeTx || "Genesis";
+    let sentChunks = Math.min(resume?.sentChunks ?? 0, chunks.length);
+    const batches = batchChunks(chunks.slice(sentChunks), NETWORKS[getNetwork()].maxBatchPayloadBytes);
     for (const batch of batches) {
-        const tx = await contract.sendCode(batch, beforeTx, 0, 0);
-        const receipt = await tx.wait();
-        beforeTx = receipt!.hash;
+        const prev = beforeTx;
+        try {
+            beforeTx = await sendMined(signer, () => contract.sendCode(batch, prev, 0, 0), target);
+        } catch (err) {
+            throw new UploadInterrupted("chunk upload interrupted", {beforeTx: prev, sentChunks}, err);
+        }
         sentChunks += batch.length;
         onProgress?.((sentChunks / chunks.length) * 100);
     }
@@ -73,13 +79,14 @@ export async function prepareUpload(
     signer: Signer,
     data: string,
     onProgress?: (pct: number) => void,
+    resume?: UploadCheckpoint,
 ): Promise<{ onChainPath: string; metadata: string }> {
     const chunks = toChunks(data);
     const isInline = chunks.length === 1 && Buffer.byteLength(chunks[0], "utf8") <= DIRECT_METADATA_MAX_BYTES;
     if (isInline) {
         return {onChainPath: "", metadata: data};
     }
-    const tailTx = await uploadLinkedList(signer, chunks, onProgress);
+    const tailTx = await uploadLinkedList(signer, chunks, onProgress, resume);
     return {onChainPath: tailTx, metadata: JSON.stringify({total_chunks: chunks.length})};
 }
 
@@ -89,35 +96,56 @@ export async function codeIn(
     filename = "",
     filetype = "",
     onProgress?: (pct: number) => void,
+    resume?: UploadCheckpoint,
 ): Promise<string> {
     const dataStr = Array.isArray(data) ? data.join("") : data;
-    const {onChainPath} = await prepareUpload(signer, dataStr, onProgress); // uppad the data here
     const contract = getContract(signer);
+    const target = await contract.getAddress();
 
-    // handle = inline data or filename, tailTx = linked list tail or ""
-    const handle = onChainPath === "" ? dataStr : (filename || "data");
-    const tailTx = onChainPath;
+    // A checkpoint with finalizedTx means the fee-paying tx already landed on
+    // a previous attempt; skipping straight to the pointer bump keeps the fee
+    // from ever being charged twice.
+    let txHash = resume?.finalizedTx;
+    let checkpoint: UploadCheckpoint = resume ?? {beforeTx: "Genesis", sentChunks: 0};
+    if (!txHash) {
+        const {onChainPath} = await prepareUpload(signer, dataStr, onProgress, resume); // uppad the data here
 
-    // Read current chain tail to pass as beforeUserTx (staleness check)
-    const userAddress = await signer.getAddress();
-    const beforeUserTx = await contract.userTxChainTail(userAddress); // zo last github tx
+        // handle = inline data or filename, tailTx = linked list tail or ""
+        const handle = onChainPath === "" ? dataStr : (filename || "data");
+        const tailTx = onChainPath;
+        checkpoint = {beforeTx: tailTx || "Genesis", sentChunks: toChunks(dataStr).length};
 
-    // Fee paid here: basicFee for inline payloads (tailTx === ""),
-    // linkedListFee when a sendCode chain was used. Mirrors solana's
-    // user_inventory_code_in branch.
-    const value = await resolveCodeInFee(signer, tailTx);
-    const tx = await contract.userInventoryCodeIn(
-        handle,
-        tailTx,
-        filetype || "text/plain",
-        "0",
-        beforeUserTx,
-        {value},
-    );
-    const txHash = (await tx.wait())!.hash;
+        // Read current chain tail to pass as beforeUserTx (staleness check)
+        const userAddress = await signer.getAddress();
+        const beforeUserTx = await contract.userTxChainTail(userAddress); // zo last github tx
+
+        // Fee paid here: basicFee for inline payloads (tailTx === ""),
+        // linkedListFee when a sendCode chain was used. Mirrors solana's
+        // user_inventory_code_in branch.
+        const value = await resolveCodeInFee(signer, tailTx);
+        try {
+            txHash = await sendMined(signer, () => contract.userInventoryCodeIn(
+                handle,
+                tailTx,
+                filetype || "text/plain",
+                "0",
+                beforeUserTx,
+                {value},
+            ), target);
+        } catch (err) {
+            // Inline uploads keep sentChunks 0 so a retry re-runs the (unpaid)
+            // finalize; linked uploads keep the whole chain.
+            if (!tailTx) checkpoint = {beforeTx: "Genesis", sentChunks: 0};
+            throw new UploadInterrupted("code-in finalize interrupted", checkpoint, err);
+        }
+    }
 
     // Free pointer bump.
-    const ptrTx = await contract.updateUserTxChainTail(txHash);
-    await ptrTx.wait();
-    return txHash;
+    const minedHash = txHash;
+    try {
+        await sendMined(signer, () => contract.updateUserTxChainTail(minedHash), target);
+    } catch (err) {
+        throw new UploadInterrupted("chain-tail bump interrupted", {...checkpoint, finalizedTx: minedHash}, err);
+    }
+    return minedHash;
 }

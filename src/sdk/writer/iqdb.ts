@@ -20,7 +20,8 @@
 
 import { type Signer, toUtf8Bytes, ZeroAddress, id as keccak } from "ethers";
 import { getContract } from "../../contract";
-import { prepareUpload } from "./code_in";
+import { prepareUpload, toChunks } from "./code_in";
+import { sendMined, UploadInterrupted, type UploadCheckpoint } from "./resilient";
 import { deriveDmSeed } from "../utils/hash";
 import {
   resolveCodeInFee,
@@ -91,24 +92,43 @@ export async function writeRow(
   tableName: string,
   rowJson: string,
   onProgress?: (pct: number) => void,
+  resume?: UploadCheckpoint,
 ) {
-  const { onChainPath, metadata } = await prepareUpload(signer, rowJson, onProgress);
   const c = getContract(signer);
+  const target = await c.getAddress();
   const rootIdBytes = toSeed(dbRootId);
   const tableSeed = toSeed(tableName);
 
-  const table = await c.getTable(rootIdBytes, tableSeed);
-  const beforeDataTx: string = table.txChainTail;
+  // A checkpoint with finalizedTx means the fee-paying dbCodeIn already
+  // landed on a previous attempt; only the free pointer bump remains.
+  let txHash = resume?.finalizedTx;
+  let checkpoint: UploadCheckpoint = resume ?? { beforeTx: "Genesis", sentChunks: 0 };
+  if (!txHash) {
+    const { onChainPath, metadata } = await prepareUpload(signer, rowJson, onProgress, resume);
+    checkpoint = onChainPath
+      ? { beforeTx: onChainPath, sentChunks: toChunks(rowJson).length }
+      : { beforeTx: "Genesis", sentChunks: 0 };
 
-  const value = await resolveCodeInFee(signer, onChainPath);
-  const tx = await c.dbCodeIn(
-    rootIdBytes, tableSeed, onChainPath, metadata, beforeDataTx, { value },
-  );
-  const txHash = (await tx.wait())!.hash;
+    const table = await c.getTable(rootIdBytes, tableSeed);
+    const beforeDataTx: string = table.txChainTail;
 
-  const ptrTx = await c.updateTableTxChainTail(rootIdBytes, tableSeed, txHash);
-  await ptrTx.wait();
-  return txHash;
+    const value = await resolveCodeInFee(signer, onChainPath);
+    try {
+      txHash = await sendMined(signer, () => c.dbCodeIn(
+        rootIdBytes, tableSeed, onChainPath, metadata, beforeDataTx, { value },
+      ), target);
+    } catch (err) {
+      throw new UploadInterrupted("row write interrupted", checkpoint, err);
+    }
+  }
+
+  const minedHash = txHash;
+  try {
+    await sendMined(signer, () => c.updateTableTxChainTail(rootIdBytes, tableSeed, minedHash), target);
+  } catch (err) {
+    throw new UploadInterrupted("table-tail bump interrupted", { ...checkpoint, finalizedTx: minedHash }, err);
+  }
+  return minedHash;
 }
 
 export async function manageRowData(
