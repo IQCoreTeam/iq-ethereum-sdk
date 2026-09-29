@@ -131,6 +131,111 @@ export async function writeRow(
   return minedHash;
 }
 
+// Phase state for writeRowWithInventory, so a retry never re-uploads chunks or
+// re-pays a fee that already landed. Carried on HybridInterrupted.checkpoint.
+export interface HybridCheckpoint {
+  upload?: UploadCheckpoint; // sendCode chunk-upload progress (phase 1)
+  onChainPath?: string;      // set once the chunks are uploaded
+  metadata?: string;         // dbCodeIn inline/header payload from prepareUpload
+  boardTx?: string;          // set once the board dbCodeIn landed (phase 2)
+  inventoryTx?: string;      // set once the user's userInventoryCodeIn landed (phase 3)
+}
+
+export class HybridInterrupted extends Error {
+  constructor(message: string, readonly checkpoint: HybridCheckpoint, readonly cause?: unknown) {
+    super(message);
+    this.name = "HybridInterrupted";
+  }
+}
+
+// Board row + native inventory in one flow, split across two signers. The
+// `chunkSigner` (a browser burner) uploads the content chunks AND writes the
+// shared board row (dbCodeIn) — these are the big-calldata sendCode txs that a
+// wallet flags as "unsimulatable / risky", so keeping them off the wallet
+// removes the warning and the per-batch popups. The `finalizeSigner` (the real
+// wallet) signs only the user's native inventory entry (userInventoryCodeIn +
+// tail bump), which is small-calldata and simulates cleanly. Both the board row
+// and the inventory entry reference the SAME uploaded chunks (onChainPath), so
+// the content is stored once. This mirrors solana's single writeRow that
+// touches the feed table and the inventory PDA together; on EVM the inventory
+// is keyed by msg.sender, so its write must be signed by the user, not the
+// burner. `who` (the author) lives inside rowJson, so the board attributes to
+// the user regardless of which key signed dbCodeIn.
+export async function writeRowWithInventory(
+  chunkSigner: Signer,
+  finalizeSigner: Signer,
+  dbRootId: string,
+  tableName: string,
+  rowJson: string,
+  opts: {
+    filename?: string;
+    filetype?: string;
+    onProgress?: (pct: number) => void;
+    resume?: HybridCheckpoint;
+  } = {},
+): Promise<{ boardTx: string; inventoryTx: string; onChainPath: string }> {
+  const cp: HybridCheckpoint = { ...(opts.resume ?? {}) };
+  const cChunk = getContract(chunkSigner);
+  const chunkTarget = await cChunk.getAddress();
+  const rootIdBytes = toSeed(dbRootId);
+  const tableSeed = toSeed(tableName);
+
+  // Phase 1 — burner uploads the content chunks once (shared by board + inventory).
+  if (cp.onChainPath === undefined) {
+    try {
+      const up = await prepareUpload(chunkSigner, rowJson, opts.onProgress, cp.upload);
+      cp.onChainPath = up.onChainPath;
+      cp.metadata = up.metadata;
+    } catch (err) {
+      if (err instanceof UploadInterrupted) cp.upload = err.checkpoint;
+      throw new HybridInterrupted("chunk upload interrupted", cp, err);
+    }
+  }
+  const onChainPath = cp.onChainPath;
+
+  // Phase 2 — burner writes the shared board row (dbCodeIn -> table tail).
+  if (!cp.boardTx) {
+    try {
+      const table = await cChunk.getTable(rootIdBytes, tableSeed);
+      const beforeDataTx: string = table.txChainTail;
+      const boardFee = await resolveCodeInFee(chunkSigner, onChainPath);
+      const boardTx = await sendMined(chunkSigner, () => cChunk.dbCodeIn(
+        rootIdBytes, tableSeed, onChainPath, cp.metadata, beforeDataTx, { value: boardFee },
+      ), chunkTarget);
+      await sendMined(chunkSigner, () => cChunk.updateTableTxChainTail(rootIdBytes, tableSeed, boardTx), chunkTarget);
+      cp.boardTx = boardTx;
+    } catch (err) {
+      throw new HybridInterrupted("board write interrupted", cp, err);
+    }
+  }
+
+  // Phase 3 — user writes the native inventory entry, pointing at the SAME chunks.
+  const cFin = getContract(finalizeSigner);
+  const finTarget = await cFin.getAddress();
+  if (!cp.inventoryTx) {
+    try {
+      const userAddress = await finalizeSigner.getAddress();
+      const beforeUserTx: string = await cFin.userTxChainTail(userAddress);
+      const handle = onChainPath === "" ? rowJson : (opts.filename || "data");
+      const invFee = await resolveCodeInFee(finalizeSigner, onChainPath);
+      cp.inventoryTx = await sendMined(finalizeSigner, () => cFin.userInventoryCodeIn(
+        handle, onChainPath, opts.filetype || "text/plain", "0", beforeUserTx, { value: invFee },
+      ), finTarget);
+    } catch (err) {
+      throw new HybridInterrupted("inventory finalize interrupted", cp, err);
+    }
+  }
+
+  // Free pointer bump for the user's inventory tail.
+  try {
+    await sendMined(finalizeSigner, () => cFin.updateUserTxChainTail(cp.inventoryTx!), finTarget);
+  } catch (err) {
+    throw new HybridInterrupted("inventory-tail bump interrupted", cp, err);
+  }
+
+  return { boardTx: cp.boardTx!, inventoryTx: cp.inventoryTx!, onChainPath };
+}
+
 export async function manageRowData(
   signer: Signer,
   dbRootId: string,
